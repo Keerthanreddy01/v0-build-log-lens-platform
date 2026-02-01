@@ -154,7 +154,7 @@ export function LeftSidebar() {
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar overscroll-contain" style={{ WebkitOverflowScrolling: "touch" }}>
         {/* Smart Filters */}
         <div className="border-b border-border p-4">
           <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">

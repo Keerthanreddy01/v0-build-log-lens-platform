@@ -1,5 +1,7 @@
 "use client";
 
+import React from "react"
+
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +23,8 @@ import {
   ArrowUp,
   SearchX,
   RotateCcw,
+  Pause,
+  Play,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -30,12 +34,37 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 
-const levelStyles: Record<LogLevel, { badge: string; bg: string; text: string }> = {
-  ERROR: { badge: "bg-destructive text-white", bg: "bg-destructive/5 hover:bg-destructive/10", text: "text-destructive" },
-  WARN: { badge: "bg-warning text-black", bg: "bg-warning/5 hover:bg-warning/10", text: "text-warning" },
-  INFO: { badge: "bg-primary text-white", bg: "hover:bg-primary/5", text: "text-primary" },
-  DEBUG: { badge: "bg-muted-foreground text-white", bg: "hover:bg-muted/30", text: "text-muted-foreground" },
-  TRACE: { badge: "bg-muted text-foreground", bg: "hover:bg-muted/20", text: "text-muted-foreground" },
+const levelStyles: Record<LogLevel, { badge: string; bg: string; text: string; border: string }> = {
+  ERROR: { 
+    badge: "bg-destructive text-white", 
+    bg: "bg-destructive/5 hover:bg-destructive/10", 
+    text: "text-destructive",
+    border: "border-l-destructive"
+  },
+  WARN: { 
+    badge: "bg-warning text-black", 
+    bg: "bg-warning/5 hover:bg-warning/10", 
+    text: "text-warning",
+    border: "border-l-warning"
+  },
+  INFO: { 
+    badge: "bg-primary text-white", 
+    bg: "hover:bg-primary/5", 
+    text: "text-primary",
+    border: "border-l-primary"
+  },
+  DEBUG: { 
+    badge: "bg-muted-foreground text-white", 
+    bg: "hover:bg-muted/30", 
+    text: "text-muted-foreground",
+    border: "border-l-muted-foreground"
+  },
+  TRACE: { 
+    badge: "bg-muted text-foreground", 
+    bg: "hover:bg-muted/20", 
+    text: "text-muted-foreground",
+    border: "border-l-muted"
+  },
 };
 
 interface LogEntryProps {
@@ -56,39 +85,57 @@ const LogEntry = memo(function LogEntry({ log, isSelected, onSelect, viewMode, i
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-    fractionalSecondDigits: 3,
   });
 
   const highlightedMessage = highlightLogMessage(log.message);
 
-  const handleDoubleClick = () => {
+  const handleDoubleClick = useCallback(() => {
     navigator.clipboard.writeText(log.rawLine);
     toast.success("Log copied to clipboard");
-  };
+  }, [log.rawLine]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onSelect();
+    }
+  }, [onSelect]);
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
       onDoubleClick={handleDoubleClick}
+      onKeyDown={handleKeyDown}
       data-index={index}
+      data-level={log.level}
       className={cn(
-        "w-full text-left border-b border-border/50 transition-all duration-100 log-entry focus-ring",
-        viewMode === "compact" ? "px-4 py-1.5" : "px-4 py-2.5",
-        isSelected ? "selected bg-primary/10 border-l-[3px] border-l-primary pl-[calc(1rem-3px)]" : styles.bg,
+        "w-full text-left border-l-[3px] transition-all duration-75 log-entry outline-none",
+        "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset",
+        viewMode === "compact" ? "px-3 py-1.5" : "px-4 py-2.5",
+        isSelected 
+          ? "bg-primary/10 border-l-primary" 
+          : cn(styles.bg, styles.border, "border-l-transparent hover:border-l-current"),
       )}
       style={{ contain: "layout style paint" }}
     >
-      <div className="flex items-start gap-3">
-        <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap tabular-nums">
+      <div className="flex items-start gap-2 sm:gap-3">
+        <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap tabular-nums shrink-0">
           {timestamp}
         </span>
-        <span className="text-[11px] font-mono text-primary whitespace-nowrap">
+        <span className="text-[11px] font-mono text-primary whitespace-nowrap shrink-0 hidden sm:inline">
           [{log.service}]
         </span>
-        <Badge className={cn("text-[10px] font-semibold px-1.5 py-0 h-[18px] shrink-0 rounded", styles.badge)}>
+        <Badge 
+          className={cn(
+            "text-[10px] font-semibold px-1.5 py-0 h-[18px] shrink-0 rounded",
+            styles.badge
+          )}
+        >
           {log.level}
         </Badge>
-        <span className="text-[13px] text-foreground flex-1 break-all font-mono leading-relaxed">
+        <span className="text-[12px] sm:text-[13px] text-foreground flex-1 break-words font-mono leading-relaxed min-w-0">
           {highlightedMessage.map((part, i) => (
             <span
               key={i}
@@ -104,7 +151,7 @@ const LogEntry = memo(function LogEntry({ log, isSelected, onSelect, viewMode, i
           ))}
         </span>
       </div>
-    </button>
+    </div>
   );
 });
 
@@ -117,6 +164,7 @@ export function LiveStreamLog({ logs }: LiveStreamLogProps) {
     selectedLogId,
     selectLog,
     isLiveTailEnabled,
+    setLiveTail,
     viewMode,
     setViewMode,
     filter,
@@ -141,42 +189,40 @@ export function LiveStreamLog({ logs }: LiveStreamLogProps) {
       const target = e.target as HTMLElement;
       const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
       
-      // Focus search with /
       if (e.key === "/" && !isInput && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         searchInputRef.current?.focus();
         return;
       }
       
-      // Only handle shortcuts when not in input
       if (isInput && e.key !== "Escape") return;
       
       switch (e.key) {
         case "e":
           if (!e.ctrlKey && !e.metaKey) {
             e.preventDefault();
-            setLevelFilter(['ERROR']);
+            setLevelFilter(["ERROR"]);
             toast.info("Showing errors only");
           }
           break;
         case "w":
           if (!e.ctrlKey && !e.metaKey) {
             e.preventDefault();
-            setLevelFilter(['WARN']);
+            setLevelFilter(["WARN"]);
             toast.info("Showing warnings only");
           }
           break;
         case "i":
           if (!e.ctrlKey && !e.metaKey) {
             e.preventDefault();
-            setLevelFilter(['INFO']);
+            setLevelFilter(["INFO"]);
             toast.info("Showing info only");
           }
           break;
         case "a":
           if (!e.ctrlKey && !e.metaKey) {
             e.preventDefault();
-            setLevelFilter(['ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE']);
+            setLevelFilter(["ERROR", "WARN", "INFO", "DEBUG", "TRACE"]);
             toast.info("Showing all logs");
           }
           break;
@@ -200,9 +246,16 @@ export function LiveStreamLog({ logs }: LiveStreamLogProps) {
             navigateLog(-1);
           }
           break;
+        case " ":
+          if (!isInput) {
+            e.preventDefault();
+            setLiveTail(!isLiveTailEnabled);
+            toast.info(isLiveTailEnabled ? "Live tail paused" : "Live tail resumed");
+          }
+          break;
         case "c":
           if (!e.ctrlKey && !e.metaKey && !isInput && selectedLogId) {
-            const log = logs.find(l => l.id === selectedLogId);
+            const log = logs.find((l) => l.id === selectedLogId);
             if (log) {
               navigator.clipboard.writeText(log.rawLine);
               toast.success("Log copied");
@@ -214,13 +267,12 @@ export function LiveStreamLog({ logs }: LiveStreamLogProps) {
     
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [setLevelFilter, updateFilter, selectLog, selectedLogId, logs]);
+  }, [setLevelFilter, updateFilter, selectLog, selectedLogId, logs, isLiveTailEnabled, setLiveTail]);
 
-  // Navigate between logs
   const navigateLog = useCallback((direction: number) => {
     if (logs.length === 0) return;
     
-    const currentIndex = selectedLogId ? logs.findIndex(l => l.id === selectedLogId) : -1;
+    const currentIndex = selectedLogId ? logs.findIndex((l) => l.id === selectedLogId) : -1;
     let newIndex: number;
     
     if (currentIndex === -1) {
@@ -234,7 +286,6 @@ export function LiveStreamLog({ logs }: LiveStreamLogProps) {
     const newLog = logs[newIndex];
     if (newLog) {
       selectLog(newLog.id);
-      // Scroll the selected log into view
       const element = scrollContainerRef.current?.querySelector(`[data-index="${newIndex}"]`);
       element?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
@@ -247,7 +298,7 @@ export function LiveStreamLog({ logs }: LiveStreamLogProps) {
     }
     searchTimeoutRef.current = setTimeout(() => {
       updateFilter({ search: localSearch });
-    }, 200);
+    }, 150);
 
     return () => {
       if (searchTimeoutRef.current) {
@@ -261,11 +312,11 @@ export function LiveStreamLog({ logs }: LiveStreamLogProps) {
     if (!scrollContainerRef.current) return;
     
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    const threshold = 100;
+    const threshold = 50;
     
     setIsAtTop(scrollTop < threshold);
     setIsAtBottom(scrollHeight - scrollTop - clientHeight < threshold);
-    setShowScrollButtons(scrollHeight > clientHeight + 200);
+    setShowScrollButtons(scrollHeight > clientHeight + 100);
   }, []);
 
   // Auto-scroll when live tail is enabled
@@ -353,7 +404,7 @@ export function LiveStreamLog({ logs }: LiveStreamLogProps) {
   const clearAllFilters = useCallback(() => {
     setLocalSearch("");
     updateFilter({ search: "" });
-    setLevelFilter(['ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE']);
+    setLevelFilter(["ERROR", "WARN", "INFO", "DEBUG", "TRACE"]);
     if (smartFilters.criticalOnly) toggleSmartFilter("criticalOnly");
     if (smartFilters.performanceIssues) toggleSmartFilter("performanceIssues");
     if (smartFilters.securityEvents) toggleSmartFilter("securityEvents");
@@ -366,16 +417,16 @@ export function LiveStreamLog({ logs }: LiveStreamLogProps) {
   return (
     <div className="flex flex-col h-full relative bg-background">
       {/* Control Bar */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border flex-wrap shrink-0 bg-background/95 backdrop-blur-sm">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border flex-wrap shrink-0 bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80">
         {/* Search */}
-        <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        <div className="relative flex-1 min-w-[150px] max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
           <Input
             ref={searchInputRef}
-            placeholder="Search logs..."
+            placeholder="Search... (press /)"
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
-            className="pl-9 pr-8 h-8 text-sm bg-secondary border-border focus:border-primary focus:ring-1 focus:ring-primary/30"
+            className="pl-8 pr-7 h-7 text-xs bg-secondary border-border focus:border-primary focus:ring-1 focus:ring-primary/30"
           />
           {localSearch && (
             <button
@@ -383,30 +434,34 @@ export function LiveStreamLog({ logs }: LiveStreamLogProps) {
                 setLocalSearch("");
                 updateFilter({ search: "" });
               }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-muted interactive-element"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-muted"
             >
-              <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+              <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
             </button>
           )}
         </div>
 
         {/* Level Filters */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 bg-secondary/50 rounded-md p-0.5">
           <Button
-            variant={filter.levels.length === 5 ? "secondary" : "ghost"}
+            variant="ghost"
             size="sm"
-            className="h-7 text-xs px-2 interactive-element"
+            className={cn(
+              "h-6 text-[10px] px-1.5 font-medium",
+              filter.levels.length === 5 && "bg-background shadow-sm"
+            )}
             onClick={() => setLevelFilter(["ERROR", "WARN", "INFO", "DEBUG", "TRACE"])}
           >
             ALL
           </Button>
-          {levels.map((level) => (
+          {levels.slice(0, 3).map((level) => (
             <Button
               key={level}
-              variant={filter.levels.length === 1 && filter.levels[0] === level ? "secondary" : "ghost"}
+              variant="ghost"
               size="sm"
               className={cn(
-                "h-7 text-xs px-2 interactive-element",
+                "h-6 text-[10px] px-1.5 font-medium",
+                filter.levels.length === 1 && filter.levels[0] === level && "bg-background shadow-sm",
                 levelStyles[level].text
               )}
               onClick={() => setLevelFilter([level])}
@@ -416,66 +471,85 @@ export function LiveStreamLog({ logs }: LiveStreamLogProps) {
           ))}
         </div>
 
+        {/* Live/Pause Toggle */}
+        <Button
+          variant={isLiveTailEnabled ? "default" : "outline"}
+          size="sm"
+          className={cn(
+            "h-7 text-xs gap-1.5 px-2",
+            isLiveTailEnabled && "bg-success hover:bg-success/90 text-white"
+          )}
+          onClick={() => setLiveTail(!isLiveTailEnabled)}
+        >
+          {isLiveTailEnabled ? (
+            <>
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
+              </span>
+              LIVE
+            </>
+          ) : (
+            <>
+              <Pause className="w-3 h-3" />
+              PAUSED
+            </>
+          )}
+        </Button>
+
         {/* Export */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1 bg-transparent interactive-element">
-              <Download className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Export</span>
-              <ChevronDown className="w-3 h-3" />
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1 px-2 bg-transparent">
+              <Download className="w-3 h-3" />
+              <ChevronDown className="w-2.5 h-2.5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={() => handleExport("txt")} className="gap-2">
-              <FileText className="w-4 h-4" />
-              Download as .txt
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={() => handleExport("txt")} className="gap-2 text-xs">
+              <FileText className="w-3.5 h-3.5" />
+              Download .txt
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleExport("json")} className="gap-2">
-              <FileJson className="w-4 h-4" />
-              Download as .json
+            <DropdownMenuItem onClick={() => handleExport("json")} className="gap-2 text-xs">
+              <FileJson className="w-3.5 h-3.5" />
+              Download .json
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleExport("csv")} className="gap-2">
-              <FileText className="w-4 h-4" />
-              Download as .csv
+            <DropdownMenuItem onClick={() => handleExport("csv")} className="gap-2 text-xs">
+              <FileText className="w-3.5 h-3.5" />
+              Download .csv
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleExport("clipboard")} className="gap-2">
-              <Clipboard className="w-4 h-4" />
+            <DropdownMenuItem onClick={() => handleExport("clipboard")} className="gap-2 text-xs">
+              <Clipboard className="w-3.5 h-3.5" />
               Copy to clipboard
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      {/* Header Row */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30 shrink-0">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-foreground">Live Stream</span>
-          {isLiveTailEnabled && (
-            <div className="flex items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
-              </span>
-              <span className="text-xs text-success font-medium">LIVE</span>
-            </div>
-          )}
-          <span className="text-xs text-muted-foreground">
-            {logs.length} of {parsedLogs.length} logs
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
+      {/* View Mode Toggle */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-muted/20 shrink-0">
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {logs.length} of {parsedLogs.length} logs
+        </span>
+        <div className="flex items-center gap-0.5 bg-secondary/50 rounded p-0.5">
           <Button
-            variant={viewMode === "compact" ? "secondary" : "ghost"}
+            variant="ghost"
             size="sm"
-            className="text-xs h-6 px-2 interactive-element"
+            className={cn(
+              "h-5 text-[10px] px-2",
+              viewMode === "compact" && "bg-background shadow-sm"
+            )}
             onClick={() => setViewMode("compact")}
           >
             Compact
           </Button>
           <Button
-            variant={viewMode === "comfortable" ? "secondary" : "ghost"}
+            variant="ghost"
             size="sm"
-            className="text-xs h-6 px-2 interactive-element"
+            className={cn(
+              "h-5 text-[10px] px-2",
+              viewMode === "comfortable" && "bg-background shadow-sm"
+            )}
             onClick={() => setViewMode("comfortable")}
           >
             Comfortable
@@ -486,25 +560,27 @@ export function LiveStreamLog({ logs }: LiveStreamLogProps) {
       {/* Log Entries */}
       <div 
         ref={scrollContainerRef} 
-        className="flex-1 overflow-y-auto log-viewer-scroll"
+        className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y custom-scrollbar"
         onScroll={handleScroll}
+        style={{ WebkitOverflowScrolling: "touch" }}
       >
         {logs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center p-8">
-            <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-              <SearchX className="w-8 h-8 text-muted-foreground" />
+          <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center p-6">
+            <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+              <SearchX className="w-7 h-7 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">No logs match your filters</h3>
-            <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-              Try adjusting your search query, level filters, or smart filters to see more results.
+            <h3 className="text-base font-semibold text-foreground mb-1.5">No logs match filters</h3>
+            <p className="text-xs text-muted-foreground mb-4 max-w-xs">
+              Try adjusting your search or level filters
             </p>
             <Button 
               variant="outline" 
+              size="sm"
               onClick={clearAllFilters}
-              className="gap-2 bg-transparent interactive-element"
+              className="gap-1.5 h-8 text-xs bg-transparent"
             >
-              <RotateCcw className="w-4 h-4" />
-              Clear All Filters
+              <RotateCcw className="w-3.5 h-3.5" />
+              Clear Filters
             </Button>
           </div>
         ) : (
@@ -525,54 +601,53 @@ export function LiveStreamLog({ logs }: LiveStreamLogProps) {
 
       {/* Floating Scroll Buttons */}
       {showScrollButtons && logs.length > 0 && (
-        <div className="absolute bottom-14 right-4 flex flex-col gap-2 z-20">
+        <div className="absolute bottom-16 right-3 flex flex-col gap-1.5 z-20">
           <button
             onClick={scrollToTop}
             disabled={isAtTop}
             className={cn(
-              "p-2 rounded-lg border shadow-lg transition-all duration-200 interactive-element",
-              "bg-card/90 backdrop-blur-sm border-border",
+              "p-1.5 rounded-md border shadow-lg transition-all duration-150",
+              "bg-card/95 backdrop-blur-sm border-border",
               "hover:bg-primary hover:border-primary hover:text-primary-foreground",
-              "disabled:opacity-30 disabled:pointer-events-none disabled:hover:bg-card/90"
+              "disabled:opacity-20 disabled:pointer-events-none"
             )}
             aria-label="Scroll to top"
           >
-            <ArrowUp className="w-4 h-4" />
+            <ArrowUp className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={scrollToBottom}
             disabled={isAtBottom}
             className={cn(
-              "p-2 rounded-lg border shadow-lg transition-all duration-200 interactive-element",
-              "bg-card/90 backdrop-blur-sm border-border",
+              "p-1.5 rounded-md border shadow-lg transition-all duration-150",
+              "bg-card/95 backdrop-blur-sm border-border",
               "hover:bg-primary hover:border-primary hover:text-primary-foreground",
-              "disabled:opacity-30 disabled:pointer-events-none disabled:hover:bg-card/90"
+              "disabled:opacity-20 disabled:pointer-events-none"
             )}
             aria-label="Scroll to bottom"
           >
-            <ArrowDown className="w-4 h-4" />
+            <ArrowDown className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* Footer */}
-      <div className="flex items-center justify-between px-4 py-2 border-t border-border text-xs text-muted-foreground bg-muted/30 shrink-0">
-        <span className="tabular-nums">{logs.length} logs displayed</span>
-        <div className="flex items-center gap-2">
-          <span className="hidden md:flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 text-[10px] bg-secondary rounded border border-border">/</kbd>
-            <span className="text-muted-foreground">search</span>
+      {/* Footer with shortcuts hint */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-t border-border text-[10px] text-muted-foreground bg-muted/20 shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="hidden sm:flex items-center gap-1">
+            <kbd className="px-1 py-0.5 bg-secondary rounded text-[9px]">/</kbd>
+            <span>search</span>
           </span>
           <span className="hidden md:flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 text-[10px] bg-secondary rounded border border-border">e</kbd>
-            <span className="text-muted-foreground">errors</span>
+            <kbd className="px-1 py-0.5 bg-secondary rounded text-[9px]">e</kbd>
+            <span>errors</span>
           </span>
-          <span className="hidden lg:flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 text-[10px] bg-secondary rounded border border-border">j/k</kbd>
-            <span className="text-muted-foreground">navigate</span>
+          <span className="hidden md:flex items-center gap-1">
+            <kbd className="px-1 py-0.5 bg-secondary rounded text-[9px]">Space</kbd>
+            <span>pause</span>
           </span>
-          <span className="text-muted-foreground">Double-click to copy</span>
         </div>
+        <span>Double-click to copy</span>
       </div>
     </div>
   );
