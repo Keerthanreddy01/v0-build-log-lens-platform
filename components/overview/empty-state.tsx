@@ -74,7 +74,7 @@ export function EmptyState() {
         {/* Action Cards */}
         <div className="grid gap-4 sm:grid-cols-3">
           <Card
-            className="cursor-pointer p-6 transition-all hover:border-primary hover:bg-muted/50"
+            className="cursor-pointer p-6 transition-all hover:border-primary hover:bg-muted/50 interactive-element"
             onClick={() => setIsPasteModalOpen(true)}
           >
             <div className="flex flex-col items-center gap-3">
@@ -91,7 +91,7 @@ export function EmptyState() {
           </Card>
 
           <Card
-            className="cursor-pointer p-6 transition-all hover:border-primary hover:bg-muted/50"
+            className="cursor-pointer p-6 transition-all hover:border-primary hover:bg-muted/50 interactive-element"
             onClick={() => fileInputRef.current?.click()}
           >
             <div className="flex flex-col items-center gap-3">
@@ -115,7 +115,7 @@ export function EmptyState() {
           </Card>
 
           <Card
-            className="cursor-pointer p-6 transition-all hover:border-primary hover:bg-muted/50"
+            className="cursor-pointer p-6 transition-all hover:border-primary hover:bg-muted/50 interactive-element"
             onClick={handleLoadSample}
           >
             <div className="flex flex-col items-center gap-3">

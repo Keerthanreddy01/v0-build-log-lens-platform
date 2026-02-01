@@ -12,6 +12,7 @@ import {
   FileJson,
   Clipboard,
   X,
+  RotateCcw,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -45,13 +46,16 @@ function LogRow({
   log,
   isSelected,
   onSelect,
+  index,
 }: {
   log: ParsedLog;
   isSelected: boolean;
   onSelect: () => void;
+  index: number;
 }) {
   const levelStyle = levelConfig[log.level];
-  const timestamp = log.timestamp.toLocaleTimeString("en-US", {
+  const dateObj = log.timestamp instanceof Date ? log.timestamp : new Date(log.timestamp);
+  const timestamp = dateObj.toLocaleTimeString("en-US", {
     hour12: false,
     hour: "2-digit",
     minute: "2-digit",
@@ -68,17 +72,17 @@ function LogRow({
     <button
       onClick={onSelect}
       onDoubleClick={handleDoubleClick}
+      data-index={index}
       className={cn(
-        "w-full text-left flex items-start gap-4 px-4 py-2 font-mono text-sm border-b border-border transition-colors",
-        "hover:bg-secondary/50",
-        isSelected && "bg-primary/5 border-l-4 border-l-primary"
+        "w-full text-left flex items-start gap-4 px-4 py-2 font-mono text-sm border-b border-border/50 transition-all duration-100 log-entry",
+        isSelected && "selected bg-primary/10 border-l-[3px] border-l-primary pl-[calc(1rem-3px)]"
       )}
     >
-      <span className="text-muted-foreground text-xs shrink-0 w-6 text-right">
+      <span className="text-muted-foreground text-xs shrink-0 w-6 text-right tabular-nums">
         {log.lineNumber}
       </span>
-      <span className="text-muted-foreground text-xs shrink-0">{timestamp}</span>
-      <Badge className={cn("text-xs px-1.5 py-0 shrink-0", levelStyle.activeColor)}>
+      <span className="text-muted-foreground text-xs shrink-0 tabular-nums">{timestamp}</span>
+      <Badge className={cn("text-[10px] px-1.5 py-0 shrink-0 h-[18px]", levelStyle.activeColor)}>
         {log.level}
       </Badge>
       <span className="text-primary text-xs shrink-0">[{log.service}]</span>
@@ -98,12 +102,14 @@ export function LiveStreamContent() {
     isLiveTailEnabled,
     setLiveTail,
     getFilteredLogs,
+    setLevelFilter,
   } = useLogStore();
 
   const [isPaused, setIsPaused] = useState(false);
   const [localSearch, setLocalSearch] = useState(filter.search);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Debounced search
   useEffect(() => {
@@ -112,7 +118,7 @@ export function LiveStreamContent() {
     }
     searchTimeoutRef.current = setTimeout(() => {
       updateFilter({ search: localSearch });
-    }, 300);
+    }, 200);
 
     return () => {
       if (searchTimeoutRef.current) {
@@ -124,40 +130,58 @@ export function LiveStreamContent() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in input
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
+
+      if (e.key === "/" && !isInput && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
         return;
       }
 
+      if (isInput && e.key !== "Escape") return;
+
       switch (e.key) {
-        case "/":
-          e.preventDefault();
-          document.querySelector<HTMLInputElement>('input[placeholder*="Search"]')?.focus();
-          break;
         case "e":
-          updateFilter({ levels: ["ERROR"] });
-          toast.info("Showing errors only");
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            setLevelFilter(["ERROR"]);
+            toast.info("Showing errors only");
+          }
           break;
         case "w":
-          updateFilter({ levels: ["WARN"] });
-          toast.info("Showing warnings only");
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            setLevelFilter(["WARN"]);
+            toast.info("Showing warnings only");
+          }
           break;
         case "a":
-          updateFilter({ levels: ["ERROR", "WARN", "INFO", "DEBUG", "TRACE"] });
-          toast.info("Showing all logs");
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            setLevelFilter(["ERROR", "WARN", "INFO", "DEBUG", "TRACE"]);
+            toast.info("Showing all logs");
+          }
           break;
         case "Escape":
+          setLocalSearch("");
+          updateFilter({ search: "" });
+          searchInputRef.current?.blur();
           selectLog(null);
+          break;
+        case " ":
+          if (!isInput) {
+            e.preventDefault();
+            setIsPaused(p => !p);
+            toast.info(isPaused ? "Resumed" : "Paused");
+          }
           break;
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [updateFilter, selectLog]);
+  }, [setLevelFilter, updateFilter, selectLog, isPaused]);
 
   const filteredLogs = getFilteredLogs();
 
@@ -178,14 +202,17 @@ export function LiveStreamContent() {
           break;
         case "json":
           content = JSON.stringify(
-            filteredLogs.map((l) => ({
-              timestamp: l.timestamp.toISOString(),
-              level: l.level,
-              service: l.service,
-              message: l.message,
-              requestId: l.requestId,
-              metadata: l.metadata,
-            })),
+            filteredLogs.map((l) => {
+              const ts = l.timestamp instanceof Date ? l.timestamp : new Date(l.timestamp);
+              return {
+                timestamp: ts.toISOString(),
+                level: l.level,
+                service: l.service,
+                message: l.message,
+                requestId: l.requestId,
+                metadata: l.metadata,
+              };
+            }),
             null,
             2
           );
@@ -194,10 +221,10 @@ export function LiveStreamContent() {
         case "csv":
           const headers = "Timestamp,Level,Service,Message,Request ID\n";
           const rows = filteredLogs
-            .map(
-              (l) =>
-                `"${l.timestamp.toISOString()}","${l.level}","${l.service}","${l.message.replace(/"/g, '""')}","${l.requestId || ""}"`
-            )
+            .map((l) => {
+              const ts = l.timestamp instanceof Date ? l.timestamp : new Date(l.timestamp);
+              return `"${ts.toISOString()}","${l.level}","${l.service}","${l.message.replace(/"/g, '""')}","${l.requestId || ""}"`;
+            })
             .join("\n");
           content = headers + rows;
           filename += ".csv";
@@ -221,6 +248,12 @@ export function LiveStreamContent() {
     [filteredLogs]
   );
 
+  const clearAllFilters = () => {
+    setLocalSearch("");
+    updateFilter({ search: "", levels: ["ERROR", "WARN", "INFO", "DEBUG", "TRACE"] });
+    toast.success("Filters cleared");
+  };
+
   // Show empty state if no logs
   if (parsedLogs.length === 0) {
     return <EmptyState />;
@@ -229,16 +262,17 @@ export function LiveStreamContent() {
   return (
     <div className="flex flex-col h-full">
       {/* Control Bar */}
-      <div className="p-4 border-b border-border space-y-3">
+      <div className="p-4 border-b border-border space-y-3 shrink-0 bg-background">
         {/* Search and Actions Row */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input
+              ref={searchInputRef}
               placeholder="Search logs... (press / to focus)"
               value={localSearch}
               onChange={(e) => setLocalSearch(e.target.value)}
-              className="pl-10 bg-secondary border-border"
+              className="pl-10 pr-8 bg-secondary border-border focus:border-primary"
             />
             {localSearch && (
               <button
@@ -246,7 +280,7 @@ export function LiveStreamContent() {
                   setLocalSearch("");
                   updateFilter({ search: "" });
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2"
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-muted interactive-element"
               >
                 <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
               </button>
@@ -259,7 +293,7 @@ export function LiveStreamContent() {
               checked={filter.useRegex}
               onCheckedChange={(checked) => updateFilter({ useRegex: checked })}
             />
-            <Label htmlFor="regex" className="text-sm text-muted-foreground">
+            <Label htmlFor="regex" className="text-sm text-muted-foreground cursor-pointer">
               Regex
             </Label>
           </div>
@@ -272,7 +306,7 @@ export function LiveStreamContent() {
                 updateFilter({ caseSensitive: checked })
               }
             />
-            <Label htmlFor="case" className="text-sm text-muted-foreground">
+            <Label htmlFor="case" className="text-sm text-muted-foreground cursor-pointer">
               Case
             </Label>
           </div>
@@ -281,8 +315,11 @@ export function LiveStreamContent() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsPaused(!isPaused)}
-              className="gap-2"
+              onClick={() => {
+                setIsPaused(!isPaused);
+                toast.info(isPaused ? "Resumed live stream" : "Paused live stream");
+              }}
+              className="gap-2 bg-transparent interactive-element"
             >
               {isPaused ? (
                 <Play className="w-4 h-4" />
@@ -294,27 +331,27 @@ export function LiveStreamContent() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1 bg-transparent">
+                <Button variant="outline" size="sm" className="gap-1 bg-transparent interactive-element">
                   <Download className="w-4 h-4" />
-                  Export
+                  <span className="hidden sm:inline">Export</span>
                   <ChevronDown className="w-3 h-3" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleExport("txt")}>
-                  <FileText className="w-4 h-4 mr-2" />
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => handleExport("txt")} className="gap-2">
+                  <FileText className="w-4 h-4" />
                   Download as .txt
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport("json")}>
-                  <FileJson className="w-4 h-4 mr-2" />
+                <DropdownMenuItem onClick={() => handleExport("json")} className="gap-2">
+                  <FileJson className="w-4 h-4" />
                   Download as .json
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport("csv")}>
-                  <FileText className="w-4 h-4 mr-2" />
+                <DropdownMenuItem onClick={() => handleExport("csv")} className="gap-2">
+                  <FileText className="w-4 h-4" />
                   Download as .csv
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport("clipboard")}>
-                  <Clipboard className="w-4 h-4 mr-2" />
+                <DropdownMenuItem onClick={() => handleExport("clipboard")} className="gap-2">
+                  <Clipboard className="w-4 h-4" />
                   Copy to clipboard
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -323,7 +360,7 @@ export function LiveStreamContent() {
         </div>
 
         {/* Level Filters */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground mr-2">Level:</span>
           {(Object.keys(levelConfig) as LogLevel[]).map((level) => {
             const config = levelConfig[level];
@@ -333,7 +370,7 @@ export function LiveStreamContent() {
                 key={level}
                 onClick={() => toggleLevel(level)}
                 className={cn(
-                  "px-2 py-1 rounded text-xs font-medium transition-colors",
+                  "px-2.5 py-1 rounded text-xs font-medium transition-all duration-150 interactive-element",
                   isActive
                     ? config.activeColor
                     : "bg-secondary text-muted-foreground hover:text-foreground"
@@ -343,15 +380,15 @@ export function LiveStreamContent() {
               </button>
             );
           })}
-          <span className="ml-auto text-xs text-muted-foreground">
-            Showing {filteredLogs.length} of {parsedLogs.length} logs
+          <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+            {filteredLogs.length} of {parsedLogs.length} logs
           </span>
         </div>
       </div>
 
       {/* Live Indicator */}
       {isLiveTailEnabled && !isPaused && (
-        <div className="px-4 py-2 bg-success/10 border-b border-success/20 flex items-center gap-2">
+        <div className="px-4 py-2 bg-success/10 border-b border-success/20 flex items-center gap-2 shrink-0">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
@@ -363,29 +400,29 @@ export function LiveStreamContent() {
       )}
 
       {/* Log Viewer */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto bg-card">
-        {filteredLogs.map((log) => (
-          <LogRow
-            key={log.id}
-            log={log}
-            isSelected={selectedLogId === log.id}
-            onSelect={() => selectLog(log.id)}
-          />
-        ))}
-
-        {filteredLogs.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-            <Filter className="w-12 h-12 mb-4 opacity-50" />
-            <p className="text-sm">No logs match your filters</p>
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto bg-card log-viewer-scroll">
+        {filteredLogs.length > 0 ? (
+          filteredLogs.map((log, index) => (
+            <LogRow
+              key={log.id}
+              log={log}
+              isSelected={selectedLogId === log.id}
+              onSelect={() => selectLog(log.id)}
+              index={index}
+            />
+          ))
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-muted-foreground p-8">
+            <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+              <Filter className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <p className="text-sm mb-4">No logs match your filters</p>
             <Button
-              variant="link"
-              onClick={() =>
-                updateFilter({
-                  search: "",
-                  levels: ["ERROR", "WARN", "INFO", "DEBUG", "TRACE"],
-                })
-              }
+              variant="outline"
+              onClick={clearAllFilters}
+              className="gap-2 bg-transparent interactive-element"
             >
+              <RotateCcw className="w-4 h-4" />
               Clear filters
             </Button>
           </div>
@@ -393,9 +430,15 @@ export function LiveStreamContent() {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-4 py-2 border-t border-border text-xs text-muted-foreground bg-muted/30">
-        <span>
-          Keyboard: / search, e errors, w warnings, a all, Esc clear
+      <div className="flex items-center justify-between px-4 py-2 border-t border-border text-xs text-muted-foreground bg-muted/30 shrink-0">
+        <span className="flex items-center gap-2">
+          <span>Keyboard:</span>
+          <kbd className="px-1.5 py-0.5 text-[10px] bg-secondary rounded border border-border">/</kbd>
+          <span>search</span>
+          <kbd className="px-1.5 py-0.5 text-[10px] bg-secondary rounded border border-border">e</kbd>
+          <span>errors</span>
+          <kbd className="px-1.5 py-0.5 text-[10px] bg-secondary rounded border border-border">space</kbd>
+          <span>pause</span>
         </span>
         <span>Double-click to copy</span>
       </div>

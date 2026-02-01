@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -41,7 +42,7 @@
   --error: #ef4444;
   --info: #0070f3;
 }
- 
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -142,44 +143,121 @@
   animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
-/* Custom Scrollbar Styles */
+/* Custom Scrollbar Styles - Production Quality */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 112, 243, 0.6);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:active {
+  background: rgba(0, 112, 243, 0.8);
+}
+
+.custom-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Log viewer specific scrollbar - slightly wider */
 .log-viewer-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #333333 transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
 }
 
 .log-viewer-scroll::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 
 .log-viewer-scroll::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
 }
 
 .log-viewer-scroll::-webkit-scrollbar-thumb {
-  background: #333333;
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 4px;
-  transition: background 0.2s ease;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
 .log-viewer-scroll::-webkit-scrollbar-thumb:hover {
   background: #0070f3;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
-/* Mobile scrolling */
-.log-viewer-scroll {
-  -webkit-overflow-scrolling: touch;
+/* Focus visible styles for accessibility */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
-/* Hide scrollbar when not hovering (optional elegant effect) */
-.log-viewer-scroll-auto-hide::-webkit-scrollbar-thumb {
-  background: transparent;
+/* Smooth transitions for interactive elements */
+.interactive-element {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
 }
 
-.log-viewer-scroll-auto-hide:hover::-webkit-scrollbar-thumb {
-  background: #333333;
+.interactive-element:active {
+  transform: scale(0.98);
 }
 
-.log-viewer-scroll-auto-hide:hover::-webkit-scrollbar-thumb:hover {
-  background: #0070f3;
+/* Log entry hover effect */
+.log-entry {
+  transition: background-color 0.1s ease;
+}
+
+.log-entry:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.log-entry.selected {
+  background-color: rgba(0, 112, 243, 0.08);
+  border-left: 3px solid #0070f3;
+}
+
+/* Responsive sidebar collapse */
+@media (max-width: 1024px) {
+  .sidebar-collapsible {
+    position: absolute;
+    z-index: 40;
+    height: 100%;
+  }
+}
+
+/* Text truncation utilities */
+.truncate-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Smooth height transitions */
+.height-transition {
+  transition: height 0.2s ease, max-height 0.2s ease;
 }
